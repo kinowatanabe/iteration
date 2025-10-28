@@ -1,0 +1,245 @@
+---
+title: "Iteration_List_Columns"
+author: "Kino Watanabe"
+date: "2025-10-28"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(rvest)
+```
+
+Make a list
+
+```{r}
+set.seed(1)
+
+vec_numeric = 5:8
+vec_char = c("My", "name", "is", "Jeff")
+vec_logical = c(TRUE, TRUE, TRUE, FALSE)
+
+
+l = list(
+  vec_numeric = 1:8,
+  mat         = matrix(1:8, 2, 4),
+  vec_logical = c(TRUE, FALSE),
+  summary     = summary(rnorm(1000)))
+l
+```
+Make a different list
+
+```{r}
+list_norms = 
+  list(
+    a = rnorm(20, 3, 1),
+    b = rnorm(20, 0, 5),
+    c = rnorm(20, 10, .2),
+    d = rnorm(20, -3, 1)
+  )
+
+is.list(list_norms)
+```
+
+
+(copy and paste the function from last time)
+
+
+```{r}
+
+```
+
+```{r}
+mean_and_sd = function(x) {
+  
+  if (!is.numeric(x)) {
+    stop("Argument x should be numeric")
+  } else if (length(x) == 1) {
+    stop("Cannot be computed for length 1 vectors")
+  }
+  
+  mean_x = mean(x)
+  sd_x = sd(x)
+
+  tibble(
+    mean = mean_x, 
+    sd = sd_x
+  )
+}
+```
+
+* We can apply the mean_and_sd function to each element of `list_norms` using the lines below.
+
+```{r}
+mean_and_sd(list_norms[[1]])
+mean_and_sd(list_norms[[2]])
+mean_and_sd(list_norms[[3]])
+mean_and_sd(list_norms[[4]])
+```
+
+* tedius --> want to replicate this using `for loop`
+
+Use a loop to iterate!
+
+```{r}
+output = vector("list", length = 4)
+
+for (i in 1:4) {
+  output[[i]] = mean_and_sd(list_norms[[i]])
+}
+
+output
+```
+# use `map` to do the same thing
+* `map`
+
+```{r}
+output = map(list_norms, mean_and_sd)
+output = map(list_norms, median)
+```
+
+```{r}
+output = vector("list", length = 4)
+
+for (i in 1:4) {
+  output[[i]] = median(list_norms[[i]])
+}
+
+output = map(list_norms, median)
+```
+
+### `map` variants
+```{r}
+output = map_dbl(list_norms, median, .id = "sample")
+output = map_dfr(list_norms, mean_and_sd, .id = "sample")
+
+```
+
+
+# LIST COLUMN
+
+Try to put my list into a dataframe. 
+
+```{r}
+listcol_df = 
+  tibble(
+    name = c("a", "b", "c", "d"),
+    sample = list_norms
+  ) 
+```
+
+* both have same legnth = 4, so they will 
+
+Did this really work?
+```{r}
+listcol_df |> pull(name)
+listcol_df |> pull(sample)
+
+```
+can i apply `mean_and_sd` ?
+
+```{r}
+mean_and_sd(pull(listcol_df, sample)[[1]])
+mean_and_sd(pull(listcol_df, sample)[[2]])
+mean_and_sd(pull(listcol_df, sample)[[3]])
+mean_and_sd(pull(listcol_df, sample)[[4]])
+```
+
+iternate using `map`
+
+```{r}
+map(pull(listcol_df, sample), mean_and_sd)
+
+```
+adding a column
+
+```{r}
+listcol_df = 
+  listcol_df |> 
+  mutate(summary = map(sample, mean_and_sd))
+
+listcol_df
+
+```
+
+```{r}
+listcol_df |> 
+  select(-sample) |> 
+  unnest(summary)
+```
+
+# Revisit NDSUH
+
+
+```{r}
+nsduh_table <- function(html, table_num) {
+  
+  table = 
+    html |> 
+    html_table() |> 
+    nth(table_num) |>
+    slice(-1) |> 
+    select(-contains("P Value")) |>
+    pivot_longer(
+      -State,
+      names_to = "age_year", 
+      values_to = "percent") |>
+    separate(age_year, into = c("age", "year"), sep = "\\(") |>
+    mutate(
+      year = str_replace(year, "\\)", ""),
+      percent = str_replace(percent, "[a-c]$", ""),
+      percent = as.numeric(percent)) |>
+    filter(!(State %in% c("Total U.S.", "Northeast", "Midwest", "South", "West")))
+  
+  table
+}
+
+
+```
+
+Try this with a `for` loop
+
+```{r}
+nsduh_url = "http://samhda.s3-us-gov-west-1.amazonaws.com/s3fs-public/field-uploads/2k15StateFiles/NSDUHsaeShortTermCHG2015.htm"
+
+nsduh_html = read_html(nsduh_url)
+
+output = vector("list", 3)
+
+for (i in c(1, 4, 5)) {
+  output[[i]] = nsduh_table(nsduh_html, i)
+}
+
+nsduh_results = bind_rows(output)
+```
+
+
+Do this with `map`
+
+```{r}
+
+```
+
+Do this all in the data frame.
+
+```{r}
+nsduh_results= 
+  tibble(
+    name = c("marj", "cocaine", "heroine"),
+    number = c(1, 4, 5)) |> 
+  mutate(table = map(number, nsduh_table, html = nsduh_html)) |> 
+  unnest(cols = "table")
+```
+
+# look at weather data
+
+```{r}
+library(p8105.datasets)
+data("weather_df")
+
+weather_nest = 
+  nest(weather_df, data = date:tmin)
+
+weather_nest
+```
+
